@@ -2,7 +2,7 @@
 {
     public static class ApiKey
     {
-        readonly public static string AlchemyApiKey = "";
+        readonly public static string AlchemyApiKey = "YourAlchemyAPIKey";
     }
 
     public class AppConfig
