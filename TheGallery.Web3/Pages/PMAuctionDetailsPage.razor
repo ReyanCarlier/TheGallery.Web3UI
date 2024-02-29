@@ -1,0 +1,243 @@
+﻿@page "/auction/pm/{contractaddress}"
+
+@inject AuctionService AuctionService
+@inject AuctionEventService AuctionEventService
+@implements IDisposable
+
+@using MudBlazor
+@using System.Numerics
+@using TheGallery.Web3UI.Events
+@using TheGallery.Web3UI.FunctionOutputs
+@using TheGallery.Web3UI.Utils
+@using static TheGallery.Web3UI.Services.AuctionService
+
+<MudText Typo="Typo.h3">PM Auction Details</MudText>
+
+@if (!isMetaMaskConnected)
+{
+    <MudText>Loading...</MudText>
+}
+else
+{
+    @if (auctionDetails.TokenId != 0)
+    {
+        <MudPaper Elevation="3" Class="pa-4 my-4">
+            <MudText>NFT N° @auctionDetails.TokenId</MudText>
+            <MudText>Floor Price   : @auctionDetails.FloorPrice MATIC</MudText>
+            <MudText>Reserve Price : @auctionDetails.ReservePrice MATIC</MudText>
+        </MudPaper>
+
+        <MudPaper Elevation="1" Class="pa-4 my-4" Style="height: 200px;">
+            <MudText>NFT Preview</MudText>
+        </MudPaper>
+
+        <MudPaper Elevation="3" Class="pa-4 my-4">
+            <MudText>Last Offer  : @(((decimal)auctionDetails.LastOffer.Amount / 100000000000000000).ToString()) MATIC</MudText>
+            <MudText>Last Bidder : @auctionDetails.LastOffer.Bidder</MudText>
+            <MudText>Offered at  : @ConvertUtil.ConvertToDateTime(auctionDetails.LastOffer.SubmittedAt)</MudText>
+            <MudText>Expires at  : @ConvertUtil.ConvertToDateTime(auctionDetails.LastOffer.BidLimit)</MudText>
+        </MudPaper>
+        if (contractOwner == walletAddress)
+        {
+            if (auctionDetails.Ended)
+            {
+                <MudButton Color="Color.Primary" Disabled=true Variant="Variant.Filled">Auction ended</MudButton>
+            }
+            else
+            {
+                <MudButton Disabled=@cantAcceptLastOffer Color="Color.Primary" Variant="Variant.Filled" OnClick="@(()=>AcceptLastOffer())">Accept Last Offer</MudButton>
+                <MudButton Disabled=@cantRefuseLastOffer Color ="Color.Warning" Variant="Variant.Filled" OnClick="@(()=>RefuseLastOffer())">Refuse Last Offer</MudButton>
+                <MudButton Disabled=@cantCancelAuction Color ="Color.Error" Variant="Variant.Filled" OnClick="@(()=>CancelAuction())">Cancel Auction</MudButton>
+            }
+        }
+        else
+        {
+            if (auctionDetails.Ended)
+            {
+                <MudButton Color="Color.Primary" Disabled=true Variant="Variant.Filled">Auction ended</MudButton>
+            }
+            else
+            {
+                <MudForm Model="@newOffer">
+                    <MudTextField Label="Amount" @bind-Value="@bidAmountFloat" />
+                    <MudDatePicker Label="Bid Limit" @bind-Date="@bidDateTimeLimit" />
+                    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@(()=>SubmitOffer())">Submit Offer</MudButton>
+                </MudForm>
+            }
+            
+        }
+
+        @if (receivedEvents.Count > 0)
+        {
+            <MudText Typo="Typo.h6">Transfers History</MudText>
+            <MudList>
+                @foreach (var _event in receivedEvents)
+                {
+                    <MudListItem> NFT n°@_event.TokenId sent to @_event.Operator</MudListItem>
+                }
+            </MudList>
+        }
+
+        @if (newOfferEvents.Count > 0)
+        {
+            <MudText Typo="Typo.h6">Offers History</MudText>
+            <MudList>
+                @foreach (var _event in newOfferEvents)
+                {
+                    <MudListItem>@_event.Operator offered @_event.AmountInMatic MATIC.</MudListItem>
+                }
+            </MudList>
+        }
+
+        @if (acceptedOfferEvents.Count > 0)
+        {
+            <MudText Typo="Typo.h6">Accepted Offers History</MudText>
+            <MudList>
+                @foreach (var _event in acceptedOfferEvents)
+                {
+                    <MudListItem>@_event.Operator accepted an offer of @_event.AmountInMatic MATIC.</MudListItem>
+                }
+            </MudList>
+        }
+
+        @if (rejectedOfferEvents.Count > 0)
+        {
+            <MudText Typo="Typo.h6">Rejected Offers History</MudText>
+            <MudList>
+                @foreach (var _event in rejectedOfferEvents)
+                {
+                    <MudListItem>@_event.Operator rejected an offer of [Amount not in Event]</MudListItem>
+                }
+            </MudList>
+        }
+    }
+    else
+    {
+        <MudText>No Auction</MudText>
+    }
+}
+
+@code {
+    [Parameter]
+    public string contractaddress { get; set; } = string.Empty;
+
+    public Auction? auctionDetails = new Auction();
+    private bool isMetaMaskConnected = false;
+    string walletAddress = string.Empty;
+    string contractOwner = string.Empty;
+    private Offer newOffer = new Offer();
+    private float bidAmountFloat;
+
+    bool cantAcceptLastOffer => auctionDetails.LastOffer.Bidder == "0x0000000000000000000000000000000000000000" || auctionDetails.Ended;
+    bool cantRefuseLastOffer => auctionDetails.LastOffer.Bidder == "0x0000000000000000000000000000000000000000" || auctionDetails.Ended;
+    bool cantCancelAuction => auctionDetails.Ended || auctionDetails.LastOffer.Bidder != "0x0000000000000000000000000000000000000000";
+    DateTime? bidDateTimeLimit;
+
+    // Events
+    private List<ReceivedEventDTO> receivedEvents = new();
+    private List<NewOfferEventDTO> newOfferEvents = new();
+    private List<OfferAcceptedEventDTO> acceptedOfferEvents = new();
+    private List<OfferDeniedEventDTO> rejectedOfferEvents = new();
+
+    // Timer
+    private Timer? _timer = null;
+
+    private async Task SubmitOffer(bool buyNow = false)
+    {
+        try
+        {
+            newOffer.Bidder = walletAddress;
+            newOffer.BidLimit = ConvertUtil.ConvertToEpochUtcSeconds(bidDateTimeLimit);
+            newOffer.Amount = new BigInteger(bidAmountFloat * 1000000000000000000);
+            string? hash = await AuctionService.SubmitOfferAsync(newOffer.BidLimit, newOffer.Amount, contractaddress);
+            if (hash != null)
+            {
+                Console.WriteLine(hash);
+            }
+            else
+            {
+                Console.WriteLine("Offer not submitted");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+        }
+    }
+
+    private async Task AcceptLastOffer()
+    {
+        try
+        {
+            await AuctionService.AcceptLastOfferAsync(contractaddress);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+        }
+    }
+
+    private async Task RefuseLastOffer()
+    {
+        try
+        {
+            await AuctionService.RefuseLastOfferAsync(contractaddress);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+        }
+    }
+
+    private async Task CancelAuction()
+    {
+        try
+        {
+            await AuctionService.CancelAuctionAsync(contractaddress);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadDataAsync();
+        _timer = new Timer(async _ => await LoadDataAsync(), null, TimeSpan.Zero, TimeSpan.FromSeconds(15));
+    }
+
+    public async Task LoadDataAsync()
+    {
+        try
+        {
+            isMetaMaskConnected = await MetaMaskService.IsSiteConnected();
+            if (!isMetaMaskConnected)
+            {
+                await MetaMaskService.ConnectMetaMask();
+            }
+            isMetaMaskConnected = true;
+            walletAddress = await MetaMaskService.GetSelectedAddress();
+            contractOwner = await AuctionService.GetContractOwnerAsync(contractaddress);
+            contractOwner = contractOwner.ToLower();
+
+            auctionDetails = await AuctionService.GetAuctionDetailsAsync(contractaddress);
+
+            receivedEvents = await AuctionEventService.GetReceivedEventsAsync(contractaddress);
+            newOfferEvents = await AuctionEventService.GetNewOfferEventsAsync(contractaddress);
+            acceptedOfferEvents = await AuctionEventService.GetOfferAcceptedEventsAsync(contractaddress);
+            rejectedOfferEvents = await AuctionEventService.GetOfferDeniedEventsAsync(contractaddress);
+
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Exception during OnInit : {ex.Message}");
+        }
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+    }
+}

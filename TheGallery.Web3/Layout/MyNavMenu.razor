@@ -1,0 +1,32 @@
+﻿@inject AuctionFactoryService AuctionFactoryService
+<MudNavMenu>
+    <MudNavLink Href="/" Match="NavLinkMatch.All">Dashboard</MudNavLink>
+    <MudNavLink Href="/auctions/pm" Match="NavLinkMatch.Prefix">PM Auctions</MudNavLink>
+    <MudNavLink Href="/auctions/sm" Match="NavLinkMatch.Prefix">SM Auctions</MudNavLink>
+    @if (_displayOwnerLinks)
+    {
+        <MudNavLink Href="/new-auction" Match="NavLinkMatch.Prefix">New Auction</MudNavLink>
+    }
+    else
+    {
+        <MudNavLink Href="/new-sm-auction" Match="NavLinkMatch.Prefix">New Auction</MudNavLink>
+    }
+</MudNavMenu>
+
+@code {
+        [Parameter]
+        public AppConfig AppConfig { get; set; } = new AppConfig();
+
+        [Parameter]
+        public string UserAddress { get; set; } = string.Empty;
+
+        bool _displayOwnerLinks = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if ((await AuctionFactoryService.GetContractOwnerAsync()).ToLower() == UserAddress.ToLower())
+        {
+            _displayOwnerLinks = true;
+        }
+    }
+}

@@ -1,0 +1,84 @@
+﻿@page "/new-auction"
+@using TheGallery.Web3UI.FunctionOutputs
+@inject AuctionService AuctionService
+@inject MockNFTService MockNFTService
+@inject AuctionFactoryService AuctionFactoryService
+@inject IMetaMaskService MetaMaskService
+@inject ISnackbar Snackbar
+
+
+<MudText Typo="Typo.h3">Create an Auction</MudText>
+
+@if (!isMetaMaskConnected)
+{
+    <MudText>You must be connected to MetaMask to access this page.</MudText>
+}
+else if (!isContractOwner)
+{
+    <MudText>You're not the owner of the contract, you can't mint a new NFT or create an auction.</MudText>
+}
+else
+{
+    <MudForm Model="@auction">
+        <MudTextField T="uint" Label="NFT ID" @bind-Value="@auction.TokenId" />
+        <MudTextField T="decimal" Label="Floor Price" @bind-Value="@auction.FloorPrice" />
+        <MudTextField T="decimal" Label="Reserve Price" @bind-Value="@auction.ReservePrice" />
+        <MudTextField T="uint" Label="Coefficient" @bind-Value="@auction.Coefficient" />
+        <MudCheckBox T="bool" Label="Buy Now" @bind-Value="@auction.BuyNow" />
+    </MudForm>
+
+    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@CreateAuction" Disabled="@(!_canCreateAuction)">
+        @(_canCreateAuction ? "Create Auction" : "Auction Ongoing")
+    </MudButton>
+
+    <MudSpacer />
+    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@StartMintingProcessAsync" Disabled="@_minting">
+        @(_minting ? "Minting..." : "Mint a new NFT")
+    </MudButton>
+
+    @if (newMintedTokenId > 0)
+    {
+        <MudText>Token ID : @newMintedTokenId</MudText>
+    }
+}
+
+@code {
+    private bool isMetaMaskConnected = false;
+    private bool isContractOwner = true;
+    private string walletAddress = string.Empty;
+    private bool _canCreateAuction = true;
+    private bool _minting = false;
+
+    private uint newMintedTokenId;
+
+    Auction auction = new Auction();
+
+    protected override async Task OnInitializedAsync()
+    {
+        isMetaMaskConnected = await MetaMaskService.IsSiteConnected();
+        if (!isMetaMaskConnected)
+        {
+            await MetaMaskService.ConnectMetaMask();
+        }
+        walletAddress = await MetaMaskService.GetSelectedAddress();
+        
+    }
+
+    private async Task StartMintingProcessAsync()
+    {
+        if (_minting) return;
+
+        _minting = true;
+        newMintedTokenId = await MockNFTService.MintNFTAsync();
+        _minting = false;
+    }
+
+    private async Task CreateAuction()
+    {
+        if (auction.TokenId <= 0 || auction.FloorPrice <= 0 || auction.ReservePrice <= 0 || auction.Coefficient <= 0)
+            return;
+
+        var tx = await AuctionFactoryService.CreateAuctionAsync(auction);
+        Console.WriteLine(tx);
+    }
+}

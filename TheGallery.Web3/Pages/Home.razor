@@ -1,0 +1,141 @@
+﻿@page "/"
+
+@using MetaMask.Blazor
+@using MetaMask.Blazor.Exceptions
+@using System.Numerics
+
+@inject IMetaMaskService MetaMaskService
+@inject NavigationManager NavigationManager
+@inject PaymentSplitterService PaymentSplitterService
+
+<PageTitle>Home</PageTitle>
+
+<MudContainer Class="mt-8 px-8" MaxWidth="MaxWidth.False">
+    <MudGrid>
+        <MudItem xs="12" sm="6" md="6">
+            <MudPaper Elevation="2" Class="pa-4" Style="height: 200px;">
+                <MudText>My Wallet</MudText>
+                <MudText>Address : @walletAddress</MudText>
+                <MudText>Balance : @balanceInMatic MATIC</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="6">
+            <MudPaper Elevation="2" Class="pa-4" Style="height: 200px;">
+                <MudText>Addresses</MudText>
+                <MudText>Artist : @ArtistAddress</MudText>
+                <MudText>Gallery : @GalleryAddress</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="4">
+            <MudPaper Elevation="2" Class="pa-4" Style="height: 200px;">
+                <MudText>Shares Repartition</MudText>
+                <MudText>Total : @TotalShares</MudText>
+                <MudText>Artist : @ArtistShares</MudText>
+                <MudText>Gallery : @GalleryShares</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="4">
+            <MudPaper Elevation="2" Class="pa-4" Style="height: 200px;">
+                <MudText>Released MATIC</MudText>
+                <MudText>Total : @TotalReleased MATIC</MudText>
+                <MudText>Artist : @ArtistReleased MATIC</MudText>
+                <MudText>Gallery : @GalleryReleased MATIC</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="4">
+            <MudPaper Elevation="2" Class="pa-4" Style="height: 200px;">
+                <MudText>Releasable MATIC</MudText>
+                <MudText>Artist : @ArtistReleasable MATIC</MudText>
+                <MudText>Gallery : @GalleryReleasable MATIC</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="4">
+            <MudPaper Elevation="2" Class="pa-4" Style="height: 60px;">
+                <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled=@cantReleaseArtist OnClick="(() => ReleaseArtist())">Release Artist's MATIC</MudButton>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="12" md="4">
+            <MudPaper Elevation="2" Class="pa-4" Style="height: 60px;">
+                <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled=@cantReleaseGallery OnClick="(() => ReleaseGallery())">Release Gallery's MATIC</MudButton>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+</MudContainer>
+
+@code
+{
+    string walletAddress = string.Empty;
+    BigInteger balance = 0;
+    float balanceInMatic = 0;
+
+    BigInteger TotalShares = 0;
+    BigInteger ArtistShares = 0;
+    BigInteger GalleryShares = 0;
+    BigInteger TotalReleased = 0;
+    BigInteger ArtistReleasable = 0;
+    BigInteger GalleryReleasable = 0;
+    BigInteger ArtistReleased = 0;
+    BigInteger GalleryReleased = 0;
+    string ArtistAddress = "";
+    string GalleryAddress = "";
+
+    bool cantReleaseArtist => !(ArtistReleasable > 0 && ArtistAddress.ToLower() == walletAddress);
+    bool cantReleaseGallery => !(GalleryReleasable > 0 && GalleryAddress.ToLower() == walletAddress);
+
+    private async Task ReleaseArtist()
+    {
+        try
+        {
+            await PaymentSplitterService.ReleaseAsync(ArtistAddress);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+        }
+    }
+
+    private async Task ReleaseGallery()
+    {
+        await PaymentSplitterService.ReleaseAsync(GalleryAddress);
+    }
+
+    private async Task LoadDatas()
+    {
+        var accounts = await MetaMaskService.GenericRpc("eth_accounts");
+        walletAddress = accounts[0].ToString();
+        balance = await MetaMaskService.GetBalance(walletAddress);
+        balanceInMatic = (float)balance / 1000000000000000000;
+
+        GalleryAddress = await PaymentSplitterService.GetPayeeAsync(0);
+        ArtistAddress = await PaymentSplitterService.GetPayeeAsync(1);
+        if (string.IsNullOrEmpty(ArtistAddress) || string.IsNullOrEmpty(GalleryAddress))
+        {
+            return;
+        }
+        TotalShares = await PaymentSplitterService.GetTotalSharesAsync();
+        ArtistShares = await PaymentSplitterService.GetSharesAsync(ArtistAddress);
+        GalleryShares = await PaymentSplitterService.GetSharesAsync(GalleryAddress);
+        TotalReleased = await PaymentSplitterService.GetReleasedAsync(GalleryAddress);
+        ArtistReleasable = await PaymentSplitterService.GetReleasableAsync(ArtistAddress);
+        GalleryReleasable = await PaymentSplitterService.GetReleasableAsync(GalleryAddress);
+        ArtistReleased = await PaymentSplitterService.GetReleasedAsync(ArtistAddress);
+        GalleryReleased = await PaymentSplitterService.GetReleasedAsync(GalleryAddress);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await LoadDatas();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+        }
+    }
+
+    private void NavigateTo(string auction)
+    {
+        NavigationManager.NavigateTo($"/auction/{auction}");
+    }
+}

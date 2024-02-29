@@ -1,0 +1,45 @@
+﻿@using TheGallery.Web3UI.FunctionOutputs
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Approval" Class="mr-3 mb-n1" />
+            Accept offer
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText>Are you sure you want to accept this offer ?</MudText>
+        <MudTextField Value="@auction.TokenId" Label="Token ID" ReadOnly="true" />
+        <MudTextField Value="@auction.LastOffer.Bidder" Label="Bidder" ReadOnly="true" />
+        <MudTextField Value="@auction.LastOffer.AmountInMaticWithDecimals" Label="Amount" ReadOnly="true" />
+
+        <MudText>Royalties paid to the Artist :</MudText>
+        <MudTextField Value="@royalty.Receiver" Label="Royalty Receiver" ReadOnly="true" />
+        <MudTextField Value="@royalty.RoyaltyAmountInMaticWithDecimals" Label="Royalty Amount" ReadOnly="true" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Error" OnClick="Cancel">Decline</MudButton>
+        <MudButton Color="Color.Success" OnClick="AcceptAuction">Accept</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    MudDialogInstance MudDialog { get; set; } = new MudDialogInstance();
+
+    [Parameter]
+    public Royalty royalty { get; set; } = new Royalty();
+
+    [Parameter]
+    public Auction auction { get; set; } = new Auction();
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private void AcceptAuction()
+    {
+        MudDialog.Close(DialogResult.Ok(auction.TokenId));
+    }
+}

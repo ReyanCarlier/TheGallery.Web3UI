@@ -1,0 +1,107 @@
+﻿@page "/auctions/pm"
+@page "/events/pm/{address}"
+
+@using Nethereum.RPC.Eth.DTOs
+@using System.Text.Json
+@implements IDisposable
+@using TheGallery.Web3UI.Events
+
+@inject AuctionEventService AuctionEventService
+@inject AuctionFactoryEventService AuctionFactoryEventService
+@inject HttpClient _httpClient
+@inject NavigationManager NavigationManager
+
+@if (string.IsNullOrEmpty(address))
+{
+    <MudText Typo="Typo.h5">PrimaryMarket New Auctions Events</MudText>
+
+    <MudList>
+        @foreach (var _event in newAuctionEvents)
+        {
+            <MudItem><MudLink OnClick="(() => NavigateTo(_event.Auction))">@_event.Auction</MudLink>submitted at @_event.SubmittedAt</MudItem>
+        }
+    </MudList>
+}
+else
+{
+    <MudText Typo="Typo.h5">Events for SecondaryMarket @address</MudText>
+
+    <MudText Typo="Typo.h6">Received Events</MudText>
+    <MudList>
+        @foreach (var _event in receivedEvents)
+        {
+            <MudListItem>@_event.From sent token @_event.TokenId to @_event.Operator</MudListItem>
+        }
+    </MudList>
+
+    <MudText Typo="Typo.h6">New Offer Events</MudText>
+    <MudList>
+        @foreach (var _event in newOfferEvents)
+        {
+            <MudListItem>@_event.Operator offered @_event.Amount for token @_event.BidLimit</MudListItem>
+        }
+    </MudList>
+
+    <MudText Typo="Typo.h6">Accepted Offer Events</MudText>
+
+    <MudList>
+        @foreach (var _event in acceptedOfferEvents)
+        {
+            <MudListItem>@_event.Operator accepted @_event.Amount.</MudListItem>
+        }
+    </MudList>
+
+    <MudText Typo="Typo.h6">Rejected Offer Events</MudText>
+    <MudList>
+        @foreach (var _event in rejectedOfferEvents)
+        {
+            <MudListItem>@_event.Operator rejected an offer</MudListItem>
+        }
+    </MudList>
+}
+
+@code
+{
+    [Parameter]
+    public string address { get; set; } = string.Empty;
+
+    private Timer? _timer = null;
+
+    private List<ReceivedEventDTO> receivedEvents = new();
+    private List<NewOfferEventDTO> newOfferEvents = new();
+    private List<OfferAcceptedEventDTO> acceptedOfferEvents = new();
+    private List<OfferDeniedEventDTO> rejectedOfferEvents = new();
+    private List<NewAuctionEventDTO> newAuctionEvents = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadDataAsync();
+        _timer = new Timer(async _ => await LoadDataAsync(), null, TimeSpan.Zero, TimeSpan.FromSeconds(15));
+    }
+
+    private async Task LoadDataAsync()
+    {
+        if (string.IsNullOrEmpty(address))
+        {
+            newAuctionEvents = await AuctionFactoryEventService.GetNewAuctionEventsAsync();
+        }
+        else
+        {
+            receivedEvents = await AuctionEventService.GetReceivedEventsAsync(address);
+            newOfferEvents = await AuctionEventService.GetNewOfferEventsAsync(address);
+            acceptedOfferEvents = await AuctionEventService.GetOfferAcceptedEventsAsync(address);
+            rejectedOfferEvents = await AuctionEventService.GetOfferDeniedEventsAsync(address);
+        }
+        StateHasChanged();
+    }
+
+    private void NavigateTo(string address)
+    {
+        NavigationManager.NavigateTo($"/auction/pm/{address}");
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+    }
+}

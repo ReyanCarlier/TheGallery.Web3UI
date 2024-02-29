@@ -1,0 +1,88 @@
+﻿@using System.Text.Json.Serialization
+@using System.Text.Json
+@using TheGallery.Web3UI.Utils
+
+@inherits LayoutComponentBase
+@inject HttpClient _httpClient
+
+<MudThemeProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="1">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((e) => DrawerToggle())" />
+        <MudText Typo="Typo.h5" Class="ml-3">Application</MudText>
+        <MudSpacer />
+        @if (isMetaMaskConnected)
+        {
+            <MudText>@UserAddress</MudText>
+        }
+        @if (!isMetaMaskInstalled)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="isMetaMaskInstalled" OnClick="@ConnectMetaMask">MetaMask not found</MudButton>
+        }
+        else
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="isMetaMaskConnected" OnClick="@ConnectMetaMask">Link MetaMask</MudButton>
+        }
+    </MudAppBar>
+    <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2">
+        @if (UserAddress != null && AppConfig != null)
+        {
+            <MyNavMenu AppConfig="AppConfig" UserAddress=@UserAddress />
+        }
+    </MudDrawer>
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.Medium">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+@code {
+    bool _drawerOpen = true;
+    public AppConfig? AppConfig { get; set; }
+
+    void DrawerToggle()
+    {
+        _drawerOpen = !_drawerOpen;
+    }
+
+    bool isMetaMaskInstalled;
+    bool isMetaMaskConnected;
+    string? UserAddress = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        isMetaMaskInstalled = await MetaMaskService.HasMetaMask();
+        if (!isMetaMaskInstalled)
+        {
+            return;
+        }
+        await ConnectMetaMask();
+        var accounts = await MetaMaskService.RequestAccounts();
+        if (accounts.Length > 0)
+        {
+            isMetaMaskConnected = true;
+        }
+        AppConfig ??= JsonSerializer.Deserialize<AppConfig>(await _httpClient.GetStringAsync("settings/ContractAddresses.json")) ?? new AppConfig();
+    }
+
+    async Task ConnectMetaMask()
+    {
+        try
+        {
+            await MetaMaskService.ConnectMetaMask();
+            isMetaMaskConnected = true;
+            var jsonstring = await MetaMaskService.RequestAccounts();
+
+            var accounts = JsonSerializer.Deserialize<List<string>>(jsonstring);
+            UserAddress = accounts?[0];
+            StateHasChanged();
+        }
+        catch (UserDeniedException)
+        {
+            Console.WriteLine("User denied the request");
+        }
+    }
+}

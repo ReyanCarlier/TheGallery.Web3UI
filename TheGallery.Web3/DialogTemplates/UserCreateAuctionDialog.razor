@@ -1,0 +1,40 @@
+﻿@using TheGallery.Web3UI.FunctionOutputs
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.CreateNewFolder" Class="mr-3 mb-n1" />
+            New Secondary Market Auction
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText>Are you sure you want to create this auction ?</MudText>
+        <MudTextField Value="@auction.TokenId" Label="Token ID" ReadOnly="true" />
+        <MudTextField Value="@auction.FloorPrice" Label="Floor Price" ReadOnly="true" />
+        <MudTextField Value="@auction.ReservePrice" Label="Reserve Price" ReadOnly="true" />
+        <MudTextField Value="@auction.Coefficient" Label="Coefficient" ReadOnly="true" />
+        <MudTextField Value="@auction.BuyNow" Label="Buy Now" ReadOnly="true" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Error" OnClick="Cancel">Decline</MudButton>
+        <MudButton Color="Color.Success" OnClick="DeleteServer">Accept</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    MudDialogInstance MudDialog { get; set; } = new MudDialogInstance();
+
+    [Parameter]
+    public Auction auction { get; set; } = new Auction();
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private void DeleteServer()
+    {
+        MudDialog.Close(DialogResult.Ok(auction.TokenId));
+    }
+}
